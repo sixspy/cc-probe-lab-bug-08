@@ -40,18 +40,37 @@ def 校验批次(体: dict) -> list[str]:
     return 错
 
 
-def 过门槛(读数: float, 规: dict, 指标键: str) -> tuple[bool, str]:
-    """基线：仅对 PM25 做上下限；其它指标默认过门槛。"""
+def 门槛判定(读数: float, 规: dict, 指标键: str, 事件: dict | None = None) -> tuple[bool, str, str]:
+    """返回 (是否过门槛, 原因码, 中文原因)。原因码是原因码映射版本门的钉住对象。"""
+    事件 = 事件 or {}
+    # 标定漂移硬闸（栏规早有“标定偏移上限”，此前未接线）。新拒因码 RC_CALIB_DRIFT
+    # 在过期 v1 映射中不存在，换版 v2 后才入映射——用于复现“新拒因码落未知桶”。
+    偏移原始 = 事件.get("标定偏移", 事件.get("标定偏差"))
+    if 偏移原始 not in (None, ""):
+        try:
+            偏移 = abs(float(偏移原始))
+            上限 = float(规.get("标定偏移上限", "5"))
+        except (TypeError, ValueError):
+            return False, "RC_RULE_THRESHOLD_CORRUPT", "标定偏移或上限非数值"
+        if 偏移 > 上限:
+            return False, "RC_CALIB_DRIFT", f"标定偏移越限|{偏移}>{上限}"
+
     if 指标键 != "PM25":
-        return True, "非PM25默认过门槛"
+        return True, "RC_NON_CONTROLLED_PASS", "非PM25默认过门槛"
     try:
         lo = float(规.get("PM25下限", "0"))
         hi = float(规.get("PM25上限", "75"))
     except ValueError:
-        return False, "栏规阈值损坏"
+        return False, "RC_RULE_THRESHOLD_CORRUPT", "栏规阈值损坏"
     if 读数 < lo or 读数 > hi:
-        return False, f"PM25越界[{lo},{hi}]"
-    return True, "过门槛"
+        return False, "RC_PM25_OUT_OF_RANGE", f"PM25越界[{lo},{hi}]"
+    return True, "RC_GATE_PASS", "过门槛"
+
+
+def 过门槛(读数: float, 规: dict, 指标键: str) -> tuple[bool, str]:
+    """基线二元组契约：仅返回 (是否通过, 中文原因)。"""
+    ok, _码, 原因 = 门槛判定(读数, 规, 指标键)
+    return ok, 原因
 
 
 def 摘要错误(错: list[str], 上限: int = 8) -> str:

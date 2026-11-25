@@ -72,6 +72,121 @@ async def api_坏点():
     return jsonify(目录.坏点列表())
 
 
+@app.get("/api/坏点匣/对账")
+async def api_坏点对账():
+    return jsonify(目录.坏点匣对账报告())
+
+
+@app.get("/api/坏点匣对账")
+async def api_坏点对账_别名():
+    return jsonify(目录.坏点匣对账报告())
+
+
+@app.post("/api/坏点匣/升格")
+async def api_坏点升格():
+    body = await request.get_json(force=True, silent=True) or {}
+    编号 = body.get("报文编号") or body.get("id") or body.get("ref") or ""
+    return jsonify(目录.升格坏点(str(编号)))
+
+
+@app.post("/api/升格坏点")
+async def api_升格坏点_别名():
+    body = await request.get_json(force=True, silent=True) or {}
+    编号 = body.get("报文编号") or body.get("id") or ""
+    return jsonify(目录.升格坏点(str(编号)))
+
+
+@app.post("/api/坏点匣/<path:ref>/升格")
+async def api_坏点升格_路径(ref: str):
+    return jsonify(目录.升格坏点(ref))
+
+
+@app.post("/api/坏点匣/注入")
+async def api_坏点注入():
+    body = await request.get_json(force=True, silent=True) or {}
+    return jsonify(目录.注入坏点(body))
+
+
+@app.post("/api/坏点匣/注入未知码")
+async def api_坏点注入未知码():
+    body = await request.get_json(force=True, silent=True) or {}
+    body.setdefault("未知", True)
+    return jsonify(目录.注入坏点(body))
+
+
+@app.post("/api/原因码映射/注入未知码")
+async def api_映射注入未知码():
+    body = await request.get_json(force=True, silent=True) or {}
+    body.setdefault("未知", True)
+    return jsonify(目录.注入坏点(body))
+
+
+@app.post("/api/坏点匣/一键升格")
+async def api_坏点一键升格():
+    body = await request.get_json(force=True, silent=True) or {}
+    编号 = body.get("报文编号") or body.get("id") or body.get("ref") or ""
+    return jsonify(目录.升格坏点(str(编号)))
+
+
+@app.post("/api/坏点匣")
+async def api_坏点登记():
+    body = await request.get_json(force=True, silent=True) or {}
+    return jsonify(目录.注入坏点(body))
+
+
+@app.get("/api/原因码映射")
+async def api_原因码映射():
+    return jsonify(目录.原因码映射状态())
+
+
+@app.post("/api/原因码映射/换版")
+async def api_原因码映射换版():
+    body = await request.get_json(force=True, silent=True) or {}
+    return jsonify(目录.换版原因码映射(body))
+
+
+@app.get("/api/升格回刷账")
+async def api_升格回刷账():
+    from app.services import 原因码映射 as _R
+    return jsonify(_R.回刷账())
+
+
+# ---- 英文稳定别名（并发脚本/外部探针友好） ----
+@app.get("/api/reasonmap/version")
+async def api_rm_version():
+    return jsonify(目录.原因码映射状态())
+
+
+@app.get("/api/reasonmap/reconcile")
+async def api_rm_reconcile():
+    return jsonify(目录.坏点匣对账报告())
+
+
+@app.get("/api/reasonmap/report")
+async def api_rm_report():
+    return jsonify(目录.坏点匣对账报告())
+
+
+@app.post("/api/reasonmap/promote")
+async def api_rm_promote():
+    body = await request.get_json(force=True, silent=True) or {}
+    编号 = body.get("报文编号") or body.get("ref") or body.get("id") or ""
+    return jsonify(目录.升格坏点(str(编号)))
+
+
+@app.post("/api/reasonmap/cutover")
+async def api_rm_cutover():
+    body = await request.get_json(force=True, silent=True) or {}
+    return jsonify(目录.换版原因码映射(body))
+
+
+@app.post("/api/reasonmap/inject-unknown")
+async def api_rm_inject():
+    body = await request.get_json(force=True, silent=True) or {}
+    body.setdefault("未知", True)
+    return jsonify(目录.注入坏点(body))
+
+
 @app.get("/api/栏贯验")
 async def api_贯验列表():
     return jsonify(目录.贯验列表())

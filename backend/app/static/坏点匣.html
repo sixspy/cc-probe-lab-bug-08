@@ -16,22 +16,31 @@
     <div class="门槛条" id="门槛条"></div>
     <header class="顶牌" style="margin-bottom:10px">
       <h1 style="font-size:22px">坏点匣</h1>
-      <div class="骨">未过质控门槛的报文旁路。</div>
+      <div class="骨">未过质控门槛的报文旁路。原因码按当前映射版本对账：未知码亮红、禁升格进现行缓冲。</div>
     </header>
 
     <section class="卷">
-      <div class="表绕"><table><thead><tr><th>编号</th><th>报文编号</th><th>站点</th><th>原因</th><th>读数</th><th>观测时</th></tr></thead><tbody id="表"></tbody></table></div>
+      <div class="横排 下距12" id="映射版本条" data-role="映射版本条">
+        <span class="徽章 好" id="映射版本灯" data-reasonmap-version="v2">原因码映射版本 v2</span>
+        <span class="说明">指纹 <code id="映射版本指纹">…………</code> · 版本门加载中…（无脚本时按页面钉版 v2）</span>
+      </div>
+      <div class="工具">
+        <button class="按钮 青" id="灌未知码" type="button">灌一个未知原因码坏点</button>
+        <button class="按钮 次" id="刷新对账" type="button">刷新对账</button>
+      </div>
+      <p class="说明" id="对账摘要">对账加载中…</p>
+      <pre class="回执" id="升格回执">点行内“一键升格”会在此显示版本门回执</pre>
+      <div class="表绕">
+        <table>
+          <thead><tr>
+            <th>编号</th><th>报文编号</th><th>站点</th><th>指标</th>
+            <th>原因码</th><th>原因</th><th>读数</th><th>观测时</th>
+            <th>对账（映射版本）</th><th>一键升格</th>
+          </tr></thead>
+          <tbody id="表"></tbody>
+        </table>
+      </div>
     </section>
-    <script>
-    (async () => {
-      const rows = await 探栏.getJSON("/api/坏点匣");
-      const tb = document.getElementById("表");
-      if (!rows.length) { tb.innerHTML = `<tr><td colspan="6">${探栏.空态("坏点匣为空。灌坏点样例可看到越界旁路。")}</td></tr>`; return; }
-      for (const r of rows) {
-        tb.appendChild(探栏.行(`<td>${r.编号}</td><td>${探栏.安全文本(r.报文编号)}</td><td>${探栏.安全文本(r.站点键)}</td><td>${探栏.徽章(r.原因,"警")}</td><td>${r.读数}</td><td>${探栏.安全文本(r.观测时)}</td>`));
-      }
-    })();
-    </script>
 
   </div>
 
@@ -45,6 +54,90 @@
     <a href="/站点源.html" >站点源</a>
     <a href="/栏规.html" >栏规</a>
   </div></nav>
+
+  <script>
+  function 灯徽章(r) {
+    if (r["已在现行"]) return `<span class="徽章 ok">已在现行</span>`;
+    if (r["灯"] === "绿" && r["可升"]) return `<span class="徽章 好">● 可升绿</span>`;
+    if (r["灯"] === "红") return `<span class="徽章 危">● 未知码·禁升红</span>`;
+    if (r["灯"] === "黄") return `<span class="徽章 警">● 映射失鲜·禁升</span>`;
+    return `<span class="徽章 警">不可升</span>`;
+  }
+  async function 升格(编号, btn) {
+    const el = document.getElementById("升格回执");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await 探栏.postJSON("/api/坏点匣/升格", { "报文编号": 编号 });
+      el.textContent = JSON.stringify(r, null, 2);
+      el.style.color = r["升格"] ? "var(--ok)" : "var(--danger)";
+    } catch (e) {
+      el.textContent = "升格请求失败：" + String(e);
+      el.style.color = "var(--danger)";
+    } finally {
+      await 刷();
+    }
+  }
+  async function 刷() {
+    const rep = await 探栏.getJSON("/api/坏点匣/对账");
+    const rows = rep["行"] || rep["rows"] || [];
+    const ver = rep["映射版本"] || rep["版本"] || "v2";
+    const fp = rep["短指纹"] || String(rep["指纹"] || "").slice(0, 12);
+    const lamp = document.getElementById("映射版本灯");
+    lamp.textContent = `原因码映射版本 ${ver}`;
+    lamp.setAttribute("data-reasonmap-version", ver);
+    lamp.className = "徽章 " + (rep["新鲜"] ? "好" : "危");
+    document.getElementById("映射版本指纹").textContent = fp;
+    document.getElementById("对账摘要").textContent =
+      `映射 ${ver}@${fp} · 共 ${rep["总数"] ?? rows.length} 点 · ` +
+      `可升绿 ${rep["可升数"] ?? 0} · 未知红 ${rep["未知数"] ?? 0} · 已在现行 ${rep["已在现行数"] ?? 0}`;
+
+    const tb = document.getElementById("表");
+    if (!rows.length) {
+      tb.innerHTML = `<tr><td colspan="10">${探栏.空态("坏点匣为空。可灌坏点样例，或点上方按钮灌未知原因码。")}</td></tr>`;
+      return;
+    }
+    tb.innerHTML = "";
+    for (const r of rows) {
+      const codeTone = r["未知"] ? "危" : "ok";
+      // 未知码也保留可点的“一键升格”：复现路径就是“写入未知码→点升格”，
+      // 由后端版本门真实拒绝并回红回执；禁升结论已由红灯/可升=false 表达。
+      const action = r["已在现行"]
+        ? `<span class="说明">—</span>`
+        : `<button class="按钮 ${r["可升"] ? "青" : "次"}" data-promote="${探栏.安全文本(r["报文编号"])}"
+             title="${探栏.安全文本(r["拒因"] || (r["可升"] ? "映射内原因码，可升格" : "版本门将校验"))}"
+             type="button">一键升格</button>`;
+      const tr = 探栏.行(
+        `<td>${r.编号}</td>` +
+        `<td>${探栏.安全文本(r.报文编号)}</td>` +
+        `<td>${探栏.安全文本(r.站点键)}</td>` +
+        `<td>${探栏.安全文本(r.指标键 || "PM25")}</td>` +
+        `<td><span class="徽章 ${codeTone}">${探栏.安全文本(r.原因码 || "(空码)")}</span></td>` +
+        `<td>${探栏.安全文本(r.原因)}</td>` +
+        `<td>${r.读数}</td>` +
+        `<td>${探栏.安全文本(r.观测时)}</td>` +
+        `<td>${灯徽章(r)}<div class="k">${探栏.安全文本(r["映射版本"] || ver)}</div></td>` +
+        `<td>${action}</td>`
+      );
+      tb.appendChild(tr);
+    }
+    tb.querySelectorAll("[data-promote]").forEach((b) => {
+      b.addEventListener("click", () => 升格(b.getAttribute("data-promote"), b));
+    });
+  }
+  document.getElementById("刷新对账").onclick = () => 刷().catch((e) => {
+    document.getElementById("对账摘要").textContent = String(e);
+  });
+  document.getElementById("灌未知码").onclick = async () => {
+    const el = document.getElementById("升格回执");
+    try {
+      const r = await 探栏.postJSON("/api/reasonmap/inject-unknown", {});
+      el.style.color = "var(--danger)";
+      el.textContent = "已灌未知码坏点：\n" + JSON.stringify(r, null, 2);
+    } catch (e) { el.textContent = String(e); }
+    await 刷();
+  };
+  刷().catch((e) => { document.getElementById("对账摘要").textContent = String(e); });
+  </script>
 
   <script>
   (async () => {

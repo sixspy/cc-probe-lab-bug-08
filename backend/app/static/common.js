@@ -54,7 +54,44 @@ function 渲染门槛(el, 规) {
     <div class="门槛卡"><div class="k">PM25 上限</div><div class="v">${安全文本(r["PM25上限"] || "—")}</div></div>
     <div class="门槛卡"><div class="k">PM25 下限</div><div class="v">${安全文本(r["PM25下限"] || "—")}</div></div>
     <div class="门槛卡"><div class="k">标定偏移</div><div class="v">${安全文本(r["标定偏移上限"] || "—")}</div></div>
+    <div class="门槛卡" data-映射版本卡 title="原因码映射版本门：旁路凭证表钉住版本指纹，未知码禁升格">
+      <div class="k">原因码映射版本</div>
+      <div class="v" data-映射版本值>v2</div>
+      <div class="k" data-映射指纹值>指纹加载中…</div>
+    </div>
   `;
+  填充映射版本卡(el);
+}
+async function 填充映射版本卡(根) {
+  try {
+    const m = await getJSON("/api/原因码映射");
+    const v = 根.querySelector("[data-映射版本值]");
+    const f = 根.querySelector("[data-映射指纹值]");
+    if (v) {
+      v.textContent = `${m["版本"] || "—"}${m["新鲜"] ? "" : " · 失鲜"}`;
+      v.setAttribute("data-reasonmap-version", m["版本"] || "");
+      v.setAttribute("data-fresh", m["新鲜"] ? "1" : "0");
+    }
+    if (f) f.textContent = `指纹 ${m["短指纹"] || (m["指纹"] || "").slice(0, 12) || "—"} · 未知码拒升`;
+  } catch (e) {
+    const f = 根.querySelector("[data-映射指纹值]");
+    if (f) f.textContent = "映射版本不可读";
+  }
+}
+async function 渲染映射版本条(el) {
+  if (!el) return;
+  try {
+    const m = await getJSON("/api/原因码映射");
+    const tone = m["新鲜"] ? "好" : "危";
+    el.innerHTML = `
+      <span class="徽章 ${tone}" data-reasonmap-version="${安全文本(m["版本"] || "")}">
+        原因码映射版本 ${安全文本(m["版本"] || "—")}
+      </span>
+      <span class="说明">指纹 <code id="映射指纹">${安全文本(m["短指纹"] || "")}</code>
+      · 旁路凭证已钉 · ${m["新鲜"] ? "新鲜一致" : "失鲜"} · 未知码一律拒升格</span>`;
+  } catch (e) {
+    el.innerHTML = `<span class="徽章 危">原因码映射版本读取失败</span>`;
+  }
 }
 function 渲染批次表(el, rows, cols) {
   if (!el) return;
@@ -88,6 +125,6 @@ function 填命运字典(el, dict) {
 }
 window.探栏 = {
   getJSON, postJSON, 行, 徽章, 空态, 安全文本, 命运色,
-  渲染水位, 渲染门槛, 渲染批次表,
+  渲染水位, 渲染门槛, 渲染批次表, 渲染映射版本条, 填充映射版本卡,
   装载摘要文, 结栏摘要文, 贯验摘要文, 填命运字典,
 };

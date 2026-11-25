@@ -107,35 +107,32 @@ def paint_ok() -> str:
 
 
 def commit_action(payload: dict | None = None) -> dict:
-    """Broken：亮灯，读轨仍 old_track，无耐久命运。"""
+    """修复后：不再 gate_bypass 短路亮假绿；回执反映真实版本门对齐状态。"""
     payload = payload or {}
+    from app.services import 原因码映射 as R
+    st = R.状态()
     conn = 连接()
     try:
         c = int(_get(conn, f"{_SLUG}_counter", "0") or "0") + 1
         _set(conn, f"{_SLUG}_counter", str(c))
-        _set(conn, f"{_SLUG}_panel_chip", _OK)
         _set(conn, f"{_SLUG}_last_payload", str(payload)[:200])
-        _set(conn, f"{_SLUG}_gate_bypass", "1")
-        _set(conn, f"{_SLUG}_active_read", _OLD)
-        _set(conn, f"{_SLUG}_reject_refresh", "0")
-        if not _get(conn, f"{_SLUG}_cutover_fp", ""):
-            _set(conn, f"{_SLUG}_cutover_fp", "stale-fp")
-        _set(conn, f"{_SLUG}_pack_decoy", f"stale-fp|{c}")
-        _set(conn, f"{_SLUG}_truth", _BAD)
-        _set(conn, f"{_SLUG}_mode", "")
-        _set(conn, f"{_SLUG}_live_flag", "")
+        # 用真实凭证状态回写展示键，杜绝“芯片绿、真相红”
+        R.同步展示键(conn, st["版本"], st["指纹"], st["新鲜"])
         conn.commit()
         return {
-            "ok": True,
-            "chip": _OK,
+            "ok": bool(st["新鲜"]),
+            "chip": _OK if st["新鲜"] else "映射失鲜",
             "title": _TITLE,
             "counter": c,
-            "active_read": _OLD,
-            "cutover_fp": "stale-fp",
-            "reject_refresh": False,
+            "active_read": _CUTOVER,
+            "cutover_fp": st["指纹"],
+            "版本": st["版本"],
+            "reject_refresh": True,
             "archive_count": 0,
             "live_flag": "",
-            "message": f"{_TITLE}已落台",
+            "aligned": st["新鲜"],
+            "gate_bypass": False,
+            "message": f"{_TITLE}版本门已核验：{st['版本']}@{st['短指纹']}",
         }
     finally:
         conn.close()

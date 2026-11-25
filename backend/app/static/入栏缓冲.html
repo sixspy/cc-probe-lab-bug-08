@@ -20,15 +20,25 @@
     </header>
 
     <section class="卷">
-      <div class="表绕"><table><thead><tr><th>报文编号</th><th>站点</th><th>指标</th><th>读数</th><th>栏号</th><th>命运</th></tr></thead><tbody id="表"></tbody></table></div>
+      <div class="横排 下距12" id="映射版本条" data-role="映射版本条">
+        <span class="徽章 好" data-reasonmap-version="v2">原因码映射版本 v2</span>
+        <span class="说明">入栏行钉住升格/装载时的映射版本与指纹；未知码不得入此轨。</span>
+      </div>
+      <div class="表绕"><table><thead><tr><th>报文编号</th><th>站点</th><th>指标</th><th>读数</th><th>栏号</th><th>命运</th><th>原因码</th><th>映射版本</th></tr></thead><tbody id="表"></tbody></table></div>
     </section>
     <script>
     (async () => {
+      探栏.渲染映射版本条(document.getElementById("映射版本条"));
       const rows = await 探栏.getJSON("/api/入栏缓冲");
       const tb = document.getElementById("表");
-      if (!rows.length) { tb.innerHTML = `<tr><td colspan="6">${探栏.空态("缓冲为空。")}</td></tr>`; return; }
+      if (!rows.length) { tb.innerHTML = `<tr><td colspan="8">${探栏.空态("缓冲为空。")}</td></tr>`; return; }
       for (const r of rows) {
-        tb.appendChild(探栏.行(`<td>${探栏.安全文本(r.报文编号)}</td><td>${探栏.安全文本(r.站点键)}</td><td>${探栏.安全文本(r.指标键)}</td><td>${r.读数}</td><td>${探栏.安全文本(r.栏号)}</td><td>${探栏.徽章(r.命运)}</td>`));
+        const code = r["原因码"]
+          ? `<span class="徽章 ok">${探栏.安全文本(r["原因码"])}</span>` : "—";
+        const ver = r["映射版本"]
+          ? `${探栏.安全文本(r["映射版本"])}<div class="k" title="${探栏.安全文本(r["映射指纹"] || "")}">${探栏.安全文本(String(r["映射指纹"] || "").slice(0, 12))}</div>`
+          : `<span class="说明">未钉版</span>`;
+        tb.appendChild(探栏.行(`<td>${探栏.安全文本(r.报文编号)}</td><td>${探栏.安全文本(r.站点键)}</td><td>${探栏.安全文本(r.指标键)}</td><td>${r.读数}</td><td>${探栏.安全文本(r.栏号)}</td><td>${探栏.徽章(r.命运)}</td><td>${code}</td><td>${ver}</td>`));
       }
     })();
     </script>

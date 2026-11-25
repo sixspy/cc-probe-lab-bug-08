@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS 入栏缓冲 (
   观测时 TEXT NOT NULL,
   栏号 TEXT NOT NULL,
   命运 TEXT NOT NULL DEFAULT '在栏',
-  入栏时 TEXT NOT NULL
+  入栏时 TEXT NOT NULL,
+  原因码 TEXT NOT NULL DEFAULT '',
+  映射版本 TEXT NOT NULL DEFAULT '',
+  映射指纹 TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS 站点汇总账 (
   汇总编号 TEXT PRIMARY KEY,
@@ -47,7 +50,10 @@ CREATE TABLE IF NOT EXISTS 坏点匣 (
   编号 INTEGER PRIMARY KEY AUTOINCREMENT,
   报文编号 TEXT NOT NULL,
   站点键 TEXT NOT NULL,
+  指标键 TEXT NOT NULL DEFAULT 'PM25',
   原因 TEXT NOT NULL,
+  原因码 TEXT NOT NULL DEFAULT '',
+  拒因码 TEXT NOT NULL DEFAULT '',
   读数 REAL NOT NULL,
   观测时 TEXT NOT NULL,
   入匣时 TEXT NOT NULL
@@ -88,11 +94,12 @@ def 此刻() -> str:
 
 
 def 初始化库() -> None:
-    # seed reasonmap display chip
-
     conn = 连接()
     conn.executescript(建表)
-    _seed_reasonmap_chip(conn)
+    _迁移旧库(conn)
+    # 原因码映射版本门：种子 v1(过期)/v2(当前) + 旁路凭证钉指纹，并同步诚实面板键
+    from app.services import 原因码映射
+    原因码映射.初始化映射(conn)
     if conn.execute("SELECT COUNT(*) AS c FROM 栏规").fetchone()["c"] == 0:
         for k, v in {
             "当前栏号": "B-demo",
@@ -119,16 +126,33 @@ def 初始化库() -> None:
 
 
 
-def _seed_reasonmap_chip(conn) -> None:
+def _现有列(conn, 表: str) -> set[str]:
+    return {r[1] for r in conn.execute(f"PRAGMA table_info({表})").fetchall()}
+
+
+def _加列若缺(conn, 表: str, 列: str, 声明: str) -> None:
+    if 列 not in _现有列(conn, 表):
+        conn.execute(f"ALTER TABLE {表} ADD COLUMN {列} {声明}")
+
+
+def _迁移旧库(conn) -> None:
+    """已部署卷里的旧表没有原因码/版本指纹列，幂等补列并回填旧原因文本。"""
+    _加列若缺(conn, "坏点匣", "指标键", "TEXT NOT NULL DEFAULT 'PM25'")
+    _加列若缺(conn, "坏点匣", "原因码", "TEXT NOT NULL DEFAULT ''")
+    _加列若缺(conn, "坏点匣", "拒因码", "TEXT NOT NULL DEFAULT ''")
+    _加列若缺(conn, "入栏缓冲", "原因码", "TEXT NOT NULL DEFAULT ''")
+    _加列若缺(conn, "入栏缓冲", "映射版本", "TEXT NOT NULL DEFAULT ''")
+    _加列若缺(conn, "入栏缓冲", "映射指纹", "TEXT NOT NULL DEFAULT ''")
+    # 旧坏点行只有中文原因：按文案回填最早两版就认识的原因码
     conn.execute(
-        "INSERT INTO 探栏元(键,值) VALUES (?,?) ON CONFLICT(键) DO UPDATE SET 值=excluded.值",
-        ("reasonmap_panel_chip", "可升已亮"),
+        "UPDATE 坏点匣 SET 原因码='RC_PM25_OUT_OF_RANGE' "
+        "WHERE COALESCE(原因码,'')='' AND 原因 LIKE '%越界%'"
     )
     conn.execute(
-        "INSERT INTO 探栏元(键,值) VALUES (?,?) ON CONFLICT(键) DO UPDATE SET 值=excluded.值",
-        ("reasonmap_truth", "未知码升格"),
+        "UPDATE 坏点匣 SET 原因码='RC_RULE_THRESHOLD_CORRUPT' "
+        "WHERE COALESCE(原因码,'')='' AND 原因 LIKE '%阈值损坏%'"
     )
     conn.execute(
-        "INSERT INTO 探栏元(键,值) VALUES (?,?) ON CONFLICT(键) DO UPDATE SET 值=excluded.值",
-        ("reasonmap_active_read", "old_track"),
+        "UPDATE 坏点匣 SET 拒因码=原因码 WHERE COALESCE(拒因码,'')='' AND 原因码<>''"
     )
+    conn.commit()
